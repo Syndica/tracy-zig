@@ -10,5 +10,10 @@
         "README.md",
         "LICENSE",
     },
-    .dependencies = .{},
+    .dependencies = .{
+        .tracy_lib = .{
+            .url = "https://github.com/wolfpld/tracy/archive/refs/tags/v0.11.1.zip",
+            .hash = "122022a478dccaed1309fb5d022f4041eec45d40c93a855ed24fad970774c2426d91",
+        },
+    },
 }

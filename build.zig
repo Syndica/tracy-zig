@@ -28,6 +28,8 @@ pub fn build(b: *std.Build) void {
     const tracy_timer_fallback = b.option(bool, "tracy_timer_fallback", "Use lower resolution timers") orelse false;
     const shared = b.option(bool, "shared", "Build the tracy client as a shared libary") orelse false;
 
+    const c_tracy = b.dependency("tracy_lib", .{});
+
     const options = b.addOptions();
     options.addOption(bool, "tracy_enable", tracy_enable);
     options.addOption(bool, "tracy_on_demand", tracy_on_demand);
@@ -62,7 +64,7 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    tracy_module.addIncludePath(b.path("./tracy/public"));
+    tracy_module.addIncludePath(c_tracy.path("public"));
 
     const tracy_client = if (shared) b.addSharedLibrary(.{
         .name = "tracy",
@@ -80,15 +82,9 @@ pub fn build(b: *std.Build) void {
     }
     tracy_client.linkLibCpp();
     tracy_client.addCSourceFile(.{
-        .file = b.path("./tracy/public/TracyClient.cpp"),
+        .file = c_tracy.path("public/TracyClient.cpp"),
         .flags = &.{},
     });
-    inline for (tracy_header_files) |header| {
-        tracy_client.installHeader(
-            b.path("./tracy/" ++ header[0]),
-            header[1],
-        );
-    }
     if (tracy_enable)
         tracy_client.defineCMacro("TRACY_ENABLE", null);
     if (tracy_on_demand)
@@ -144,50 +140,3 @@ fn digits2(value: usize) [2]u8 {
         "6061626364656667686970717273747576777879" ++
         "8081828384858687888990919293949596979899")[value * 2 ..][0..2].*;
 }
-
-const tracy_header_files = [_][2][]const u8{
-    .{ "./public/tracy/TracyC.h", "tracy/TracyC.h" },
-    .{ "./public/tracy/Tracy.hpp", "tracy/Tracy.hpp" },
-    .{ "./public/tracy/TracyD3D11.hpp", "tracy/TracyD3D11.hpp" },
-    .{ "./public/tracy/TracyD3D12.hpp", "tracy/TracyD3D12.hpp" },
-    .{ "./public/tracy/TracyLua.hpp", "tracy/TracyLua.hpp" },
-    .{ "./public/tracy/TracyOpenCL.hpp", "tracy/TracyOpenCL.hpp" },
-    .{ "./public/tracy/TracyOpenGL.hpp", "tracy/TracyOpenGL.hpp" },
-    .{ "./public/tracy/TracyVulkan.hpp", "tracy/TracyVulkan.hpp" },
-
-    .{ "./public/client/tracy_concurrentqueue.h", "client/tracy_concurrentqueue.h" },
-    .{ "./public/client/tracy_rpmalloc.hpp", "client/tracy_rpmalloc.hpp" },
-    .{ "./public/client/tracy_SPSCQueue.h", "client/tracy_SPSCQueue.h" },
-    .{ "./public/client/TracyArmCpuTable.hpp", "client/TracyArmCpuTable.hpp" },
-    .{ "./public/client/TracyCallstack.h", "client/TracyCallstack.h" },
-    .{ "./public/client/TracyCallstack.hpp", "client/TracyCallstack.hpp" },
-    .{ "./public/client/TracyCpuid.hpp", "client/TracyCpuid.hpp" },
-    .{ "./public/client/TracyDebug.hpp", "client/TracyDebug.hpp" },
-    .{ "./public/client/TracyDxt1.hpp", "client/TracyDxt1.hpp" },
-    .{ "./public/client/TracyFastVector.hpp", "client/TracyFastVector.hpp" },
-    .{ "./public/client/TracyLock.hpp", "client/TracyLock.hpp" },
-    .{ "./public/client/TracyProfiler.hpp", "client/TracyProfiler.hpp" },
-    .{ "./public/client/TracyRingBuffer.hpp", "client/TracyRingBuffer.hpp" },
-    .{ "./public/client/TracyScoped.hpp", "client/TracyScoped.hpp" },
-    .{ "./public/client/TracyStringHelpers.hpp", "client/TracyStringHelpers.hpp" },
-    .{ "./public/client/TracySysPower.hpp", "client/TracySysPower.hpp" },
-    .{ "./public/client/TracySysTime.hpp", "client/TracySysTime.hpp" },
-    .{ "./public/client/TracySysTrace.hpp", "client/TracySysTrace.hpp" },
-    .{ "./public/client/TracyThread.hpp", "client/TracyThread.hpp" },
-
-    .{ "./public/common/tracy_lz4.hpp", "common/tracy_lz4.hpp" },
-    .{ "./public/common/tracy_lz4hc.hpp", "common/tracy_lz4hc.hpp" },
-    .{ "./public/common/TracyAlign.hpp", "common/TracyAlign.hpp" },
-    .{ "./public/common/TracyAlloc.hpp", "common/TracyAlloc.hpp" },
-    .{ "./public/common/TracyApi.h", "common/TracyApi.h" },
-    .{ "./public/common/TracyColor.hpp", "common/TracyColor.hpp" },
-    .{ "./public/common/TracyForceInline.hpp", "common/TracyForceInline.hpp" },
-    .{ "./public/common/TracyMutex.hpp", "common/TracyMutex.hpp" },
-    .{ "./public/common/TracyProtocol.hpp", "common/TracyProtocol.hpp" },
-    .{ "./public/common/TracyQueue.hpp", "common/TracyQueue.hpp" },
-    .{ "./public/common/TracySocket.hpp", "common/TracySocket.hpp" },
-    .{ "./public/common/TracyStackFrames.hpp", "common/TracyStackFrames.hpp" },
-    .{ "./public/common/TracySystem.hpp", "common/TracySystem.hpp" },
-    .{ "./public/common/TracyUwp.hpp", "common/TracyUwp.hpp" },
-    .{ "./public/common/TracyYield.hpp", "common/TracyYield.hpp" },
-};
