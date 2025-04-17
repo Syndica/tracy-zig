@@ -130,9 +130,9 @@ fn toTracySrc(
 
 pub const Lockable = struct {
     ctx: if (options.tracy_enable) *c.__tracy_lockable_context_data else void,
-    pub fn announce(src: std.builtin.SourceLocation, name: ?[:0]const u8) Lockable {
+    pub fn announce(src: std.builtin.SourceLocation, name: ?[*:0]const u8) Lockable {
         comptime if (!options.tracy_enable) return .{};
-        return .{c.___tracy_announce_lockable_ctx(&toTracySrc(src, name))};
+        return .{ .ctx = c.___tracy_announce_lockable_ctx(&toTracySrc(src, name)) orelse @panic("wat") };
     }
     pub fn terminate(self: *Lockable) void {
         comptime if (!options.tracy_enable) return;
