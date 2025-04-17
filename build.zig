@@ -76,6 +76,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    if (tracy_enable) {
+        tracy_module.link_libcpp = true;
+        tracy_module.linkLibrary(tracy_client);
+    }
+
     if (target.result.os.tag == .windows) {
         tracy_client.linkSystemLibrary("dbghelp");
         tracy_client.linkSystemLibrary("ws2_32");
