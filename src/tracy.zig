@@ -121,6 +121,49 @@ const ZoneContext = if (options.tracy_enable) extern struct {
     pub inline fn value(_: *const ZoneContext, _: u64) void {}
 };
 
+fn toTracySrc(
+    src: std.builtin.SourceLocation,
+    name: ?[*:0]const u8,
+) c.___tracy_source_location_data {
+    return .{ .name = name, .file = src.file, .function = src.fn_name, .line = src.line, .color = 0 };
+}
+
+pub const Lockable = struct {
+    ctx: if (options.tracy_enable) *c.tracy_lockable_context_data else void,
+    pub fn announce(src: std.builtin.SourceLocation, name: ?[:0]const u8) Lockable {
+        comptime if (!options.tracy_enable) return .{};
+        return .{c.___tracy_announce_lockable_ctx(&toTracySrc(src, name))};
+    }
+    pub fn terminate(self: *Lockable) void {
+        comptime if (!options.tracy_enable) return;
+        c.___tracy_terminate_lockable_ctx(self.ctx);
+    }
+    pub fn beforeLock(self: *Lockable) void {
+        comptime if (!options.tracy_enable) return;
+        _ = c.___tracy_before_lock_lockable_ctx(self.ctx);
+    }
+    pub fn afterLock(self: *Lockable) void {
+        comptime if (!options.tracy_enable) return;
+        c.___tracy_after_lock_lockable_ctx(self.ctx);
+    }
+    pub fn afterUnlock(self: *Lockable) void {
+        comptime if (!options.tracy_enable) return;
+        c.___tracy_after_unlock_lockable_ctx(self.ctx);
+    }
+    pub fn afterTryUnlock(self: *Lockable) void {
+        comptime if (!options.tracy_enable) return;
+        c.___tracy_after_try_lock_lockable_ctx(self.ctx);
+    }
+    pub fn mark(self: *Lockable, src: std.builtin.SourceLocation, name: ?[:0]const u8) void {
+        comptime if (!options.tracy_enable) return;
+        c.___tracy_mark_lockable_ctx(self.ctx, &toTracySrc(src, name));
+    }
+    pub fn customName(self: *Lockable, name: []const u8) void {
+        comptime if (!options.tracy_enable) return;
+        c.___tracy_custom_name_lockable_ctx(self.ctx, name.ptr, name.len);
+    }
+};
+
 pub inline fn initZone(comptime src: std.builtin.SourceLocation, comptime opts: ZoneOptions) ZoneContext {
     if (!options.tracy_enable) return .{};
     const active: c_int = @intFromBool(opts.active);
