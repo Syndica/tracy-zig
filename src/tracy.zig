@@ -113,10 +113,59 @@ pub const ZoneContext = struct {
         if (!options.tracy_enable) return;
         c.___tracy_emit_zone_value(zone.ctx, zone_value);
     }
+} else struct {
+    pub inline fn deinit(_: *const ZoneContext) void {}
+    pub inline fn name(_: *const ZoneContext, _: []const u8) void {}
+    pub inline fn text(_: *const ZoneContext, _: []const u8) void {}
+    pub inline fn color(_: *const ZoneContext, _: u32) void {}
+    pub inline fn value(_: *const ZoneContext, _: u64) void {}
 };
 
-pub inline fn beginZone(comptime src: std.builtin.SourceLocation, opts: ZoneOptions) ZoneContext {
-    if (!options.tracy_enable) return .{ .ctx = void{} };
+fn toTracySrc(
+    src: std.builtin.SourceLocation,
+    name: ?[*:0]const u8,
+) c.___tracy_source_location_data {
+    return .{ .name = name, .file = src.file, .function = src.fn_name, .line = src.line, .color = 0 };
+}
+
+pub const Lockable = struct {
+    ctx: if (options.tracy_enable) *c.__tracy_lockable_context_data else void,
+    pub fn announce(src: std.builtin.SourceLocation, name: ?[*:0]const u8) Lockable {
+        comptime if (!options.tracy_enable) return .{};
+        return .{ .ctx = c.___tracy_announce_lockable_ctx(&toTracySrc(src, name)) orelse @panic("wat") };
+    }
+    pub fn terminate(self: *Lockable) void {
+        comptime if (!options.tracy_enable) return;
+        c.___tracy_terminate_lockable_ctx(self.ctx);
+    }
+    pub fn beforeLock(self: *Lockable) void {
+        comptime if (!options.tracy_enable) return;
+        _ = c.___tracy_before_lock_lockable_ctx(self.ctx);
+    }
+    pub fn afterLock(self: *Lockable) void {
+        comptime if (!options.tracy_enable) return;
+        c.___tracy_after_lock_lockable_ctx(self.ctx);
+    }
+    pub fn afterUnlock(self: *Lockable) void {
+        comptime if (!options.tracy_enable) return;
+        c.___tracy_after_unlock_lockable_ctx(self.ctx);
+    }
+    pub fn afterTryUnlock(self: *Lockable) void {
+        comptime if (!options.tracy_enable) return;
+        c.___tracy_after_try_lock_lockable_ctx(self.ctx);
+    }
+    pub fn mark(self: *Lockable, src: std.builtin.SourceLocation, name: ?[:0]const u8) void {
+        comptime if (!options.tracy_enable) return;
+        c.___tracy_mark_lockable_ctx(self.ctx, &toTracySrc(src, name));
+    }
+    pub fn customName(self: *Lockable, name: []const u8) void {
+        comptime if (!options.tracy_enable) return;
+        c.___tracy_custom_name_lockable_ctx(self.ctx, name.ptr, name.len);
+    }
+};
+
+pub inline fn initZone(comptime src: std.builtin.SourceLocation, comptime opts: ZoneOptions) ZoneContext {
+    if (!options.tracy_enable) return .{};
     const active: c_int = @intFromBool(opts.active);
 
     const src_loc = c.___tracy_source_location_data{
@@ -266,13 +315,18 @@ pub const TracingAllocator = struct {
             .vtable = &.{
                 .alloc = alloc,
                 .resize = resize,
-                .remap = remap,
+                .remap = std.mem.Allocator.noRemap,
                 .free = free,
             },
         };
     }
 
-    fn alloc(ctx: *anyopaque, len: usize, alignment: Alignment, ret_addr: usize) ?[*]u8 {
+    fn alloc(
+        ctx: *anyopaque,
+        len: usize,
+        ptr_align: std.mem.Alignment,
+        ret_addr: usize,
+    ) ?[*]u8 {
         const self: *Self = @ptrCast(@alignCast(ctx));
         const result = self.backing_allocator.rawAlloc(len, alignment, ret_addr);
 
@@ -287,7 +341,13 @@ pub const TracingAllocator = struct {
         return result;
     }
 
-    fn resize(ctx: *anyopaque, memory: []u8, alignment: Alignment, new_len: usize, ret_addr: usize) bool {
+    fn resize(
+        ctx: *anyopaque,
+        buf: []u8,
+        buf_align: std.mem.Alignment,
+        new_len: usize,
+        ret_addr: usize,
+    ) bool {
         const self: *Self = @ptrCast(@alignCast(ctx));
         const result = self.backing_allocator.rawResize(memory, alignment, new_len, ret_addr);
 
@@ -304,12 +364,12 @@ pub const TracingAllocator = struct {
         return result;
     }
 
-    fn remap(ctx: *anyopaque, memory: []u8, alignment: Alignment, new_len: usize, ret_addr: usize) ?[*]u8 {
-        const self: *Self = @ptrCast(@alignCast(ctx));
-        return self.backing_allocator.rawRemap(memory, alignment, new_len, ret_addr);
-    }
-
-    fn free(ctx: *anyopaque, memory: []u8, alignment: Alignment, ret_addr: usize) void {
+    fn free(
+        ctx: *anyopaque,
+        buf: []u8,
+        buf_align: std.mem.Alignment,
+        ret_addr: usize,
+    ) void {
         const self: *Self = @ptrCast(@alignCast(ctx));
         self.backing_allocator.rawFree(memory, alignment, ret_addr);
 
