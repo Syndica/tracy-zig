@@ -31,41 +31,31 @@ pub fn build(b: *std.Build) void {
     const c_tracy = b.dependency("tracy_lib", .{});
 
     const options = b.addOptions();
-    const tracy_enable = option(b, options, bool, "tracy_enable", "Enable profiling", true);
-    const tracy_on_demand = option(b, options, bool, "tracy_on_demand", "On-demand profiling", false);
-    const tracy_callstack = callstack: {
-        const opt = b.option(u8, "tracy_callstack", "Enforce callstack collection for tracy regions");
-        options.addOption(?u8, "tracy_callstack", opt);
-        break :callstack opt;
-    };
-    const tracy_no_callstack = option(b, options, bool, "tracy_no_callstack", "Disable all callstack related functionality", false);
-    const tracy_no_callstack_inlines = option(b, options, bool, "tracy_no_callstack_inlines", "Disables the inline functions in callstacks", false);
-    const tracy_only_localhost = option(b, options, bool, "tracy_only_localhost", "Only listen on the localhost interface", false);
-    const tracy_no_broadcast = option(b, options, bool, "tracy_no_broadcast", "Disable client discovery by broadcast to local network", false);
-    const tracy_only_ipv4 = option(b, options, bool, "tracy_only_ipv4", "Tracy will only accept connections on IPv4 addresses (disable IPv6)", false);
-    const tracy_no_code_transfer = option(b, options, bool, "tracy_no_code_transfer", "Disable collection of source code", false);
-    const tracy_no_context_switch = option(b, options, bool, "tracy_no_context_switch", "Disable capture of context switches", false);
-    const tracy_no_exit = option(b, options, bool, "tracy_no_exit", "Client executable does not exit until all profile data is sent to server", false);
-    const tracy_no_sampling = option(b, options, bool, "tracy_no_sampling", "Disable call stack sampling", false);
-    const tracy_no_verify = option(b, options, bool, "tracy_no_verify", "Disable zone validation for C API", false);
-    const tracy_no_vsync_capture = option(b, options, bool, "tracy_no_vsync_capture", "Disable capture of hardware Vsync events", false);
-    const tracy_no_frame_image = option(b, options, bool, "tracy_no_frame_image", "Disable the frame image support and its thread", false);
-    // @FIXME: For some reason system tracing crashes the program, will need to investigate
-    //  panics during some drawf thing within libbacktrace (c++)
-    const tracy_no_system_tracing = option(b, options, bool, "tracy_no_system_tracing", "Disable systrace sampling", true);
-    const tracy_delayed_init = option(b, options, bool, "tracy_delayed_init", "Enable delayed initialization of the library (init on first call)", false);
-    const tracy_manual_lifetime = option(b, options, bool, "tracy_manual_lifetime", "Enable the manual lifetime management of the profile", false);
-    const tracy_fibers = option(b, options, bool, "tracy_fibers", "Enable fibers support", false);
-    const tracy_no_crash_handler = option(b, options, bool, "tracy_no_crash_handler", "Disable crash handling", false);
-    const tracy_timer_fallback = option(b, options, bool, "tracy_timer_fallback", "Use lower resolution timers", false);
-    const shared = option(b, options, bool, "shared", "Build the tracy client as a shared libary", false);
+    options.addOption(bool, "tracy_enable", tracy_enable);
+    options.addOption(bool, "tracy_on_demand", tracy_on_demand);
+    options.addOption(?u8, "tracy_callstack", tracy_callstack);
+    options.addOption(bool, "tracy_no_callstack", tracy_no_callstack);
+    options.addOption(bool, "tracy_no_callstack_inlines", tracy_no_callstack_inlines);
+    options.addOption(bool, "tracy_only_localhost", tracy_only_localhost);
+    options.addOption(bool, "tracy_no_broadcast", tracy_no_broadcast);
+    options.addOption(bool, "tracy_only_ipv4", tracy_only_ipv4);
+    options.addOption(bool, "tracy_no_code_transfer", tracy_no_code_transfer);
+    options.addOption(bool, "tracy_no_context_switch", tracy_no_context_switch);
+    options.addOption(bool, "tracy_no_exit", tracy_no_exit);
+    options.addOption(bool, "tracy_no_sampling", tracy_no_sampling);
+    options.addOption(bool, "tracy_no_verify", tracy_no_verify);
+    options.addOption(bool, "tracy_no_vsync_capture", tracy_no_vsync_capture);
+    options.addOption(bool, "tracy_no_frame_image", tracy_no_frame_image);
+    options.addOption(bool, "tracy_no_system_tracing", tracy_no_system_tracing);
+    options.addOption(bool, "tracy_delayed_init", tracy_delayed_init);
+    options.addOption(bool, "tracy_manual_lifetime", tracy_manual_lifetime);
+    options.addOption(bool, "tracy_fibers", tracy_fibers);
+    options.addOption(bool, "tracy_no_crash_handler", tracy_no_crash_handler);
+    options.addOption(bool, "tracy_timer_fallback", tracy_timer_fallback);
+    options.addOption(bool, "shared", shared);
 
-    const c_tracy = b.dependency("tracy_lib", .{});
-
-    const mod = b.addModule("tracy", .{
-        .root_source_file = b.path("src/tracy.zig"),
-        .target = target,
-        .optimize = optimize,
+    const tracy_module = b.addModule("tracy", .{
+        .root_source_file = b.path("./src/tracy.zig"),
         .imports = &.{
             .{
                 .name = "tracy-options",
@@ -92,8 +82,8 @@ pub fn build(b: *std.Build) void {
     }
 
     if (target.result.os.tag == .windows) {
-        mod.linkSystemLibrary("dbghelp", .{ .needed = true });
-        mod.linkSystemLibrary("ws2_32", .{ .needed = true });
+        tracy_client.linkSystemLibrary("dbghelp");
+        tracy_client.linkSystemLibrary("ws2_32");
     }
     tracy_client.linkLibCpp();
     tracy_client.addCSourceFile(.{

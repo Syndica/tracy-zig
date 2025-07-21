@@ -1,10 +1,10 @@
 const std = @import("std");
 const builtin = @import("builtin");
-pub const options = @import("tracy-options");
+const options = @import("tracy-options");
 const c = @cImport({
     if (options.tracy_enable) @cDefine("TRACY_ENABLE", {});
     if (options.tracy_on_demand) @cDefine("TRACY_ON_DEMAND", {});
-    if (options.tracy_callstack) |depth| @cDefine(std.fmt.comptimePrint("TRACY_CALLSTACK \"{d}\"", .{depth}), {});
+    if (options.tracy_callstack) |depth| @cDefine("TRACY_CALLSTACK", "\"" ++ digits2(depth) ++ "\"");
     if (options.tracy_no_callstack) @cDefine("TRACY_NO_CALLSTACK", {});
     if (options.tracy_no_callstack_inlines) @cDefine("TRACY_NO_CALLSTACK_INLINES", {});
     if (options.tracy_only_localhost) @cDefine("TRACY_ONLY_LOCALHOST", {});
@@ -28,7 +28,7 @@ const c = @cImport({
     @cInclude("tracy/TracyC.h");
 });
 
-pub inline fn setThreadName(name: [:0]const u8) void {
+pub inline fn setThreadName(comptime name: [:0]const u8) void {
     if (!options.tracy_enable) return;
     c.___tracy_set_thread_name(name);
 }
@@ -55,21 +55,21 @@ pub inline fn frameMark() void {
     c.___tracy_emit_frame_mark(null);
 }
 
-pub inline fn frameMarkNamed(name: [:0]const u8) void {
+pub inline fn frameMarkNamed(comptime name: [:0]const u8) void {
     if (!options.tracy_enable) return;
     c.___tracy_emit_frame_mark(name);
 }
 
-pub const DiscontinuousFrame = struct {
+const DiscontinuousFrame = struct {
     name: [:0]const u8,
 
-    pub inline fn end(frame: *const DiscontinuousFrame) void {
+    pub inline fn deinit(frame: *const DiscontinuousFrame) void {
         if (!options.tracy_enable) return;
         c.___tracy_emit_frame_mark_end(frame.name);
     }
 };
 
-pub inline fn startDiscontinuousFrame(comptime name: [:0]const u8) DiscontinuousFrame {
+pub inline fn initDiscontinuousFrame(comptime name: [:0]const u8) DiscontinuousFrame {
     if (!options.tracy_enable) return .{ .name = name };
     c.___tracy_emit_frame_mark_start(name);
     return .{ .name = name };
@@ -77,7 +77,7 @@ pub inline fn startDiscontinuousFrame(comptime name: [:0]const u8) Discontinuous
 
 pub inline fn frameImage(image: *anyopaque, width: u16, height: u16, offset: u8, flip: bool) void {
     if (!options.tracy_enable) return;
-    c.___tracy_emit_frame_image(image, width, height, offset, @as(c_int, @intFromBool(flip)));
+    c.___tracy_emit_frame_mark_image(image, width, height, offset, @as(c_int, @intFromBool(flip)));
 }
 
 pub const ZoneOptions = struct {
@@ -86,30 +86,30 @@ pub const ZoneOptions = struct {
     color: ?u32 = null,
 };
 
-pub const ZoneContext = struct {
-    ctx: if (options.tracy_enable) c.___tracy_c_zone_context else void,
+const ZoneContext = if (options.tracy_enable) extern struct {
+    ctx: c.___tracy_c_zone_context,
 
-    pub inline fn end(zone: ZoneContext) void {
+    pub inline fn deinit(zone: *const ZoneContext) void {
         if (!options.tracy_enable) return;
         c.___tracy_emit_zone_end(zone.ctx);
     }
 
-    pub inline fn name(zone: ZoneContext, zone_name: []const u8) void {
+    pub inline fn name(zone: *const ZoneContext, zone_name: []const u8) void {
         if (!options.tracy_enable) return;
         c.___tracy_emit_zone_name(zone.ctx, zone_name.ptr, zone_name.len);
     }
 
-    pub inline fn text(zone: ZoneContext, zone_text: []const u8) void {
+    pub inline fn text(zone: *const ZoneContext, zone_text: []const u8) void {
         if (!options.tracy_enable) return;
         c.___tracy_emit_zone_text(zone.ctx, zone_text.ptr, zone_text.len);
     }
 
-    pub inline fn color(zone: ZoneContext, zone_color: u32) void {
+    pub inline fn color(zone: *const ZoneContext, zone_color: u32) void {
         if (!options.tracy_enable) return;
         c.___tracy_emit_zone_color(zone.ctx, zone_color);
     }
 
-    pub inline fn value(zone: ZoneContext, zone_value: u64) void {
+    pub inline fn value(zone: *const ZoneContext, zone_value: u64) void {
         if (!options.tracy_enable) return;
         c.___tracy_emit_zone_value(zone.ctx, zone_value);
     }
@@ -168,42 +168,44 @@ pub inline fn initZone(comptime src: std.builtin.SourceLocation, comptime opts: 
     if (!options.tracy_enable) return .{};
     const active: c_int = @intFromBool(opts.active);
 
-    const src_loc = c.___tracy_source_location_data{
-        .name = if (opts.name) |name| name.ptr else null,
-        .function = src.fn_name.ptr,
-        .file = src.file,
-        .line = src.line,
-        .color = opts.color orelse 0,
+    const static = struct {
+        var src_loc = c.___tracy_source_location_data{
+            .name = if (opts.name) |name| name.ptr else null,
+            .function = src.fn_name.ptr,
+            .file = src.file,
+            .line = src.line,
+            .color = opts.color orelse 0,
+        };
     };
 
     if (!options.tracy_no_callstack) {
         if (options.tracy_callstack) |depth| {
             return .{
-                .ctx = c.___tracy_emit_zone_begin_callstack(&src_loc, depth, active),
+                .ctx = c.___tracy_emit_zone_begin_callstack(&static.src_loc, depth, active),
             };
         }
     }
 
     return .{
-        .ctx = c.___tracy_emit_zone_begin(&src_loc, active),
+        .ctx = c.___tracy_emit_zone_begin(&static.src_loc, active),
     };
 }
 
-pub inline fn plot(comptime T: type, name: [:0]const u8, value: T) void {
+pub inline fn plot(comptime T: type, comptime name: [:0]const u8, value: T) void {
     if (!options.tracy_enable) return;
 
     const type_info = @typeInfo(T);
     switch (type_info) {
-        .int => |int_type| {
+        .Int => |int_type| {
             if (int_type.bits > 64) @compileError("Too large int to plot");
             if (int_type.signedness == .unsigned and int_type.bits > 63) @compileError("Too large unsigned int to plot");
-            c.___tracy_emit_plot_int(name, @intCast(value));
+            c.___tracy_emit_plot_int(name, value);
         },
-        .float => |float_type| {
+        .Float => |float_type| {
             if (float_type.bits <= 32) {
-                c.___tracy_emit_plot_float(name, @floatCast(value));
+                c.___tracy_emit_plot_float(name, value);
             } else if (float_type.bits <= 64) {
-                c.___tracy_emit_plot(name, @floatCast(value));
+                c.___tracy_emit_plot(name, value);
             } else {
                 @compileError("Too large float to plot");
             }
@@ -212,11 +214,11 @@ pub inline fn plot(comptime T: type, name: [:0]const u8, value: T) void {
     }
 }
 
-pub const PlotType = enum(c.TracyPlotFormatEnum) {
-    Number = c.TracyPlotFormatNumber,
-    Memory = c.TracyPlotFormatMemory,
-    Percentage = c.TracyPlotFormatPercentage,
-    Watt = c.TracyPlotFormatWatt,
+pub const PlotType = enum(c_int) {
+    Number,
+    Memory,
+    Percentage,
+    Watt,
 };
 
 pub const PlotConfig = struct {
@@ -226,7 +228,7 @@ pub const PlotConfig = struct {
     color: u32,
 };
 
-pub inline fn plotConfig(name: [:0]const u8, config: PlotConfig) void {
+pub inline fn plotConfig(comptime name: [:0]const u8, comptime config: PlotConfig) void {
     if (!options.tracy_enable) return;
     c.___tracy_emit_plot_config(
         name,
@@ -237,13 +239,13 @@ pub inline fn plotConfig(name: [:0]const u8, config: PlotConfig) void {
     );
 }
 
-pub inline fn message(msg: [:0]const u8) void {
+pub inline fn message(comptime msg: [:0]const u8) void {
     if (!options.tracy_enable) return;
     const depth = options.tracy_callstack orelse 0;
     c.___tracy_emit_messageL(msg, depth);
 }
 
-pub inline fn messageColor(msg: [:0]const u8, color: u32) void {
+pub inline fn messageColor(comptime msg: [:0]const u8, color: u32) void {
     if (!options.tracy_enable) return;
     const depth = options.tracy_callstack orelse 0;
     c.___tracy_emit_messageLC(msg, color, depth);
@@ -285,31 +287,27 @@ pub inline fn printAppInfo(comptime fmt: []const u8, args: anytype) void {
     c.___tracy_emit_message_appinfo(written.ptr, written.len);
 }
 
-// @TODO: Add explicit support for area allocators when the discard emit comes out in stable tracy
 pub const TracingAllocator = struct {
+    parent_allocator: std.mem.Allocator,
     pool_name: ?[:0]const u8,
-    backing_allocator: std.mem.Allocator,
 
     const Self = @This();
-    const Alignment = std.mem.Alignment;
 
-    pub fn init(backing_allocator: std.mem.Allocator) Self {
+    pub fn init(parent_allocator: std.mem.Allocator) Self {
         return .{
-            .backing_allocator = backing_allocator,
+            .parent_allocator = parent_allocator,
             .pool_name = null,
         };
     }
 
-    pub fn initNamed(pool_name: [:0]const u8, backing_allocator: std.mem.Allocator) Self {
+    pub fn initNamed(comptime pool_name: [:0]const u8, parent_allocator: std.mem.Allocator) Self {
         return .{
+            .parent_allocator = parent_allocator,
             .pool_name = pool_name,
-            .backing_allocator = backing_allocator,
         };
     }
 
     pub fn allocator(self: *Self) std.mem.Allocator {
-        if (!options.tracy_enable) return self.backing_allocator;
-
         return .{
             .ptr = self,
             .vtable = &.{
@@ -328,14 +326,13 @@ pub const TracingAllocator = struct {
         ret_addr: usize,
     ) ?[*]u8 {
         const self: *Self = @ptrCast(@alignCast(ctx));
-        const result = self.backing_allocator.rawAlloc(len, alignment, ret_addr);
+        const result = self.parent_allocator.rawAlloc(len, ptr_align, ret_addr);
+        if (!options.tracy_enable) return result;
 
-        if (options.tracy_enable) {
-            if (self.pool_name) |name| {
-                c.___tracy_emit_memory_alloc_named(result, len, 0, name.ptr);
-            } else {
-                c.___tracy_emit_memory_alloc(result, len, 0);
-            }
+        if (self.pool_name) |name| {
+            c.___tracy_emit_memory_alloc_named(result, len, 0, name.ptr);
+        } else {
+            c.___tracy_emit_memory_alloc(result, len, 0);
         }
 
         return result;
@@ -349,19 +346,20 @@ pub const TracingAllocator = struct {
         ret_addr: usize,
     ) bool {
         const self: *Self = @ptrCast(@alignCast(ctx));
-        const result = self.backing_allocator.rawResize(memory, alignment, new_len, ret_addr);
+        const result = self.parent_allocator.rawResize(buf, buf_align, new_len, ret_addr);
+        if (!result) return false;
 
-        if (options.tracy_enable) {
-            if (self.pool_name) |name| {
-                c.___tracy_emit_memory_free_named(memory.ptr, 0, name.ptr);
-                c.___tracy_emit_memory_alloc_named(memory.ptr, new_len, 0, name.ptr);
-            } else {
-                c.___tracy_emit_memory_free(memory.ptr, 0);
-                c.___tracy_emit_memory_alloc(memory.ptr, new_len, 0);
-            }
+        if (!options.tracy_enable) return true;
+
+        if (self.pool_name) |name| {
+            c.___tracy_emit_memory_free_named(buf.ptr, 0, name.ptr);
+            c.___tracy_emit_memory_alloc_named(buf.ptr, new_len, 0, name.ptr);
+        } else {
+            c.___tracy_emit_memory_free(buf.ptr, 0);
+            c.___tracy_emit_memory_alloc(buf.ptr, new_len, 0);
         }
 
-        return result;
+        return true;
     }
 
     fn free(
@@ -371,14 +369,23 @@ pub const TracingAllocator = struct {
         ret_addr: usize,
     ) void {
         const self: *Self = @ptrCast(@alignCast(ctx));
-        self.backing_allocator.rawFree(memory, alignment, ret_addr);
 
         if (options.tracy_enable) {
             if (self.pool_name) |name| {
-                c.___tracy_emit_memory_free_named(memory.ptr, 0, name.ptr);
+                c.___tracy_emit_memory_free_named(buf.ptr, 0, name.ptr);
             } else {
-                c.___tracy_emit_memory_free(memory.ptr, 0);
+                c.___tracy_emit_memory_free(buf.ptr, 0);
             }
         }
+
+        self.parent_allocator.rawFree(buf, buf_align, ret_addr);
     }
 };
+
+fn digits2(value: usize) [2]u8 {
+    return ("0001020304050607080910111213141516171819" ++
+        "2021222324252627282930313233343536373839" ++
+        "4041424344454647484950515253545556575859" ++
+        "6061626364656667686970717273747576777879" ++
+        "8081828384858687888990919293949596979899")[value * 2 ..][0..2].*;
+}
