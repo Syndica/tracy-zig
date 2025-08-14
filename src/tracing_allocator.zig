@@ -24,11 +24,12 @@ fn alloc(ctx: *anyopaque, len: usize, ptr_align: std.mem.Alignment, ret_addr: us
     const self: *TracingAllocator = @ptrCast(@alignCast(ctx));
     const result = self.parent.rawAlloc(len, ptr_align, ret_addr);
     if (!options.enable) return result;
+    const depth = options.callstack orelse 0;
 
     if (self.name) |name| {
-        c.___tracy_emit_memory_alloc_named(result, len, 0, name);
+        c.___tracy_emit_memory_alloc_callstack_named(result, len, depth, 0, name);
     } else {
-        c.___tracy_emit_memory_alloc(result, len, 0);
+        c.___tracy_emit_memory_alloc_callstack(result, len, depth, 0);
     }
 
     return result;
@@ -46,13 +47,14 @@ fn resize(
     if (!result) return false;
 
     if (!options.enable) return true;
+    const depth = options.callstack orelse 0;
 
     if (self.name) |name| {
-        c.___tracy_emit_memory_free_named(buf.ptr, 0, name);
-        c.___tracy_emit_memory_alloc_named(buf.ptr, new_len, 0, name);
+        c.___tracy_emit_memory_free_callstack_named(buf.ptr, 0, depth, name);
+        c.___tracy_emit_memory_alloc_callstack_named(buf.ptr, new_len, depth, 0, name);
     } else {
-        c.___tracy_emit_memory_free(buf.ptr, 0);
-        c.___tracy_emit_memory_alloc(buf.ptr, new_len, 0);
+        c.___tracy_emit_memory_free_callstack(buf.ptr, depth, 0);
+        c.___tracy_emit_memory_alloc_callstack(buf.ptr, new_len, depth, 0);
     }
 
     return true;
@@ -60,12 +62,13 @@ fn resize(
 
 fn free(ctx: *anyopaque, buf: []u8, buf_align: std.mem.Alignment, ret_addr: usize) void {
     const self: *TracingAllocator = @ptrCast(@alignCast(ctx));
+    const depth = options.callstack orelse 0;
 
     if (options.enable) {
         if (self.name) |name| {
-            c.___tracy_emit_memory_free_named(buf.ptr, 0, name);
+            c.___tracy_emit_memory_free_callstack_named(buf.ptr, 0, depth, name);
         } else {
-            c.___tracy_emit_memory_free(buf.ptr, 0);
+            c.___tracy_emit_memory_free_callstack(buf.ptr, depth, 0);
         }
     }
 
