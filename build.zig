@@ -13,13 +13,17 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "tracy-options", .module = tracy_options_module },
         },
-        .sanitize_c = false, // tracy has some UB :(
+        .sanitize_c = .off, // tracy has some UB :(
     });
 
-    const libtracy = b.addStaticLibrary(.{
+    const libtracy = b.addLibrary(.{
         .name = "tracy",
-        .target = target,
-        .optimize = optimize,
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .sanitize_c = .off,
+        }),
     });
     libtracy.linkLibC();
     libtracy.linkLibCpp();
@@ -32,7 +36,6 @@ pub fn build(b: *std.Build) void {
         },
         .flags = &.{},
     });
-    libtracy.root_module.sanitize_c = false;
 
     libtracy.addIncludePath(upstream.path("public/tracy"));
     libtracy.installHeader(upstream.path("public/tracy/TracyC.h"), "tracy/tracy/TracyC.h");
