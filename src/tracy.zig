@@ -68,7 +68,7 @@ pub fn frameImage(image: *anyopaque, width: u16, height: u16, offset: u8, flip: 
     c.___tracy_emit_frame_mark_image(image, width, height, offset, @as(c_int, @intFromBool(flip)));
 }
 
-pub fn plot(comptime T: type, comptime name: [*:0]const u8, value: T) void {
+pub fn plot(comptime T: type, name: [*:0]const u8, value: T) void {
     if (!options.enable) return;
 
     const type_info = @typeInfo(T);
