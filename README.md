@@ -5,4 +5,4 @@ Easy to use bindings for the tracy client C API.
 ## Dependencies
 
 - Zig 0.14.1
-- Tracy 0.12.2
+- Tracy 0.13.0
