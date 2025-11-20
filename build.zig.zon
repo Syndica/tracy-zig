@@ -1,6 +1,6 @@
 .{
     .name = .zig_tracy,
-    .version = "0.12.2",
+    .version = "0.13.0",
     .minimum_zig_version = "0.14.1",
     .fingerprint = 0x1c9150cf47cb32e1,
     .paths = .{
@@ -12,8 +12,8 @@
     },
     .dependencies = .{
         .tracy = .{
-            .url = "https://github.com/wolfpld/tracy/archive/refs/tags/v0.12.2.zip",
-            .hash = "N-V-__8AANptPwE8EYOS5w6KRzVyfllpOBthYRcuuQvYhhxb",
+            .url = "https://github.com/wolfpld/tracy/archive/refs/tags/v0.13.0.zip",
+            .hash = "N-V-__8AAHW7KwHH_eNEviRWLkRfsxpWFrdOYM9f8VeCin4q",
         },
     },
 }
